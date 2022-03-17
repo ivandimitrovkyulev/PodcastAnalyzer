@@ -1,15 +1,17 @@
-from os import path
-from pytube import YouTube
+import os
+import re
+import pandas as pd
+from pytube import YouTube, Channel
 from pprint import pprint
-from .common.helpers import helpers
+from common.helpers import extract_chapters, download_audio
 
+
+dir_path = os.path.dirname(os.path.realpath(__file__)) + "/videos"
 
 keywords = ('bitcoin', 'cryptocurrency', 'money', 'inflation', 'ethereum', 'blockchain',
             'satoshi', 'nakamoto')
 
 df_podcasts = pd.read_csv("LexFridman_Podcasts_Description.csv")
 
-# yt = YouTube("https://www.youtube.com/watch?v=nWTvXbQHwWs")
-#a = yt.streams.filter(only_audio=True).first().download()
-
-test = helpers.channel_videos_list()
+url_dict = extract_chapters(df_podcasts, keywords)
+download_audio(url_dict, dir_path)
