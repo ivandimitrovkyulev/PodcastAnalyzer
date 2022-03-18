@@ -1,7 +1,13 @@
+import os
 import re
+import subprocess
 import pandas as pd
 from datetime import timedelta
-from pytube import Channel, YouTube
+from multiprocessing.dummy import Pool
+from pytube import (
+    Channel,
+    YouTube,
+)
 
 
 def get_chapters(
@@ -47,14 +53,54 @@ def get_chapters(
     return video_chapters
 
 
-def download_audio(
-        url_dict: dict,
+def download_media(
+        url_list: list,
         pathname: str = "",
-):
+        media_type: int = 1,
+) -> list:
+    """
+    Download media from YouTube given media URL list.
 
-    for url in url_dict.keys():
+    :param url_list: A list of media URLs to download
+    :param pathname: Where to save. Default is current working dir.
+    :param media_type: 0 for Video, 1 for Audio. Default 1-Audio
+    :return: List of downloaded media
+    """
+
+    def download_audio(url):
         yt = YouTube(url)
-        yt.streams.filter(only_audio=True).first().download(pathname)
+        file = yt.streams.filter(only_audio=True).first().download(pathname)
+
+        new_file = file.split(".mp4")[0] + ".mp3"
+        subprocess.run(['mv', f'{file}', f'{new_file}'])
+
+        return file
+
+    def download_video(url):
+        yt = YouTube(url)
+        file = yt.streams.filter().get_highest_resolution().download(pathname)
+
+        return file
+
+    try:
+        os.chdir(pathname)
+    except FileNotFoundError:
+        os.mkdir(pathname)
+        os.chdir(pathname)
+
+    # If video selected
+    if media_type == 0:
+        with Pool(os.cpu_count()) as pool:
+            file_names = pool.map(download_video, url_list)
+            media_list = [name for name in file_names]
+
+    # If audio is selected
+    else:
+        with Pool(os.cpu_count()) as pool:
+            file_names = pool.map(download_audio, url_list)
+            media_list = [name for name in file_names]
+
+    return media_list
 
 
 def channel_videos_list(
@@ -112,7 +158,7 @@ def channel_videos_list(
     return df
 
 
-def extract_chapters(
+def extract_matching_chapters(
         dataframe: pd.DataFrame,
         keywords: tuple = ("",),
 ) -> dict:
@@ -148,3 +194,61 @@ def extract_chapters(
             }
 
     return chapters_to_extract
+
+
+def split_media_chapters(
+        folder_path: str,
+        chapter_dict: dict,
+):
+    """
+    Given folder with media files, cuts out clips from each one based on dict of chapters
+    with name, start and end timestamps.
+
+    :param folder_name: Name of folder containing the media files
+    :param chapter_dict: Dict of chapters of extract_matching_chapters type
+    :return:
+    """
+    regex = re.compile("[:;,.|()#-+*!@£$%^&/]")
+
+    def split(video, extension):
+        video_name = video['video_name']
+        video_name = regex.sub("", video_name)
+
+        filename = video_name + '.' + extension
+        chapters = video['chapters']
+
+        # Create new folder with video name
+        os.mkdir(video_name)
+
+        message = f"{video_name}\n"
+        for chapter in chapters.keys():
+            start = chapters[chapter][0]
+            end = chapters[chapter][1]
+            new_file = chapter + "." + extension
+
+            subprocess.run(['ffmpeg', '-i', f'{filename}', '-ss', f'{start}', '-to', f'{end}',
+                           '-c:v', 'copy', '-c:a', 'copy', f'{video_name}/{new_file}'])
+
+            message += f"{chapter}, {start}, {end}\n"
+
+        command = f"echo '{message}' > '{video_name}/info.txt'"
+        os.system(command)
+
+
+    # cd into folder
+    os.chdir(folder_path)
+    cwd = os.getcwd()
+    # Get all video file names
+    files = [file for file in os.listdir(cwd)
+             if os.path.isfile(os.path.join(cwd, file)) and file != '.DS_Store']
+
+    if len(files) == 0:
+        print(f"{folder_path} contains no files.")
+        return 0
+
+    extensions = {file.split(".")[-1] for file in files}
+    ext = list(extensions)[0]
+    args = [(video, ext) for video in chapter_dict.values()]
+
+    with Pool(os.cpu_count()) as pool:
+        results = pool.starmap(split, args)
