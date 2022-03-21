@@ -1,23 +1,24 @@
 import os
-import subprocess
-from os import path, listdir, getcwd, chdir, mkdir
-from os.path import isfile, join
 import re
 import pandas as pd
-from pytube import YouTube, Channel
 from pprint import pprint
-from multiprocessing.dummy import Pool
-from common.helpers import extract_matching_chapters, download_media, channel_videos_list,split_media_chapters
+import subprocess
+from common.helpers import (
+    extract_matching_chapters,
+    download_media,
+    split_media_chapters,
+    list_chapters,
+)
 
 
-dir_path = path.dirname(path.realpath(__file__)) + "/test"
+dir_path = os.path.dirname(os.path.realpath(__file__)) + "/videos"
 
-keywords = ('bitcoin', 'cryptocurrency', 'money', 'inflation', 'ethereum', 'blockchain',
-            'satoshi', 'nakamoto')
-df_podcasts = pd.read_csv("LexFridman_Podcasts_Description.csv")
+keywords = ('bitcoin', 'ethereum', 'smart contract', 'money', 'inflation', 'satoshi',
+            'cryptocurrency', 'satoshi', 'nakamoto', 'bank')
+
+df = pd.read_csv("LexFridman_Podcasts_Description.csv")
+chapters = extract_matching_chapters(df, keywords)
+urls = [url for url in chapters.keys()]
 
 
-url_dict = extract_matching_chapters(df_podcasts, keywords)
-
-
-split_media_chapters(dir_path, url_dict)
+concat_media(dir_path, 'media.txt', 'concat_video.mp4')
