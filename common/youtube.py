@@ -2,56 +2,80 @@ import os
 import re
 import subprocess
 import pandas as pd
+
 from tqdm import tqdm
-from datetime import timedelta, datetime
 from multiprocessing.dummy import Pool
+
+from datetime import (
+    timedelta,
+    datetime
+)
 from pytube import (
     Channel,
     YouTube,
 )
+from common.resources import (
+    list_files,
+    most_common,
+    get_chapters,
+)
 
 
-def get_chapters(
-        description: str,
-        media_length: str,
-) -> dict:
+def channel_videos_list(
+        channel_url: str,
+        filename: str = "",
+        write_to_file: bool = False,
+) -> pd.DataFrame:
     """
-    Attempt to extract YouTube media chapters from its description.
+    Given a YouTube channel URL, collects the info of all of its videos and constructs a DataFrame.
 
-    :param description: String to iterate through and look for chapters
-    :param media_length: Media length in the %H:%M:%S format as last timestamp
-    :returns: Dict with chapters containing name, start time & end time
+    :param channel_url: A URL of the YouTube channel
+    :param filename: Name of the file to save to
+    :param write_to_file: If True write to .csv file
+    :returns: Pandas DataFrame with columns:
+    Name, URL_Link, Length, Views, Publish_date, Description, Keywords, Author, ID
     """
 
-    # Regex to match timestamp, eg. 4:35:21
-    regex_time = re.compile(r"(\d?[:]?\d+[:]\d+)")
+    column_names = ('Name', 'URL_Link', 'Length', 'Views', "Publish_date", 'Description', 'Keywords', 'Author', 'ID')
 
-    media_chapters = {}
+    # Construct a YouTube channel object
+    channel = Channel(channel_url)
 
-    lines = description.split("\n")
-    start_list = []
-    chapter_name_list = []
-    for line in lines:
-        # Check if lines contains timestamp
-        result = regex_time.search(line)
-        # If timestamp found
-        if result is not None:
-            # Append start time
-            start_list.append(result[0])
+    print(f"Collecting videos from - {channel.channel_name}, {channel_url}")
 
-            for i, char in enumerate(line):
-                if char.isalpha():
-                    # Append chapter name
-                    chapter_name_list.append(line[i:].lower())
-                    break
+    if filename == "":
+        name = re.sub(" ", "", channel.channel_name)
+        filename = name + "_videos.csv"
 
-    for i, chapter in enumerate(chapter_name_list):
-        try:
-            media_chapters[chapter] = (start_list[i], start_list[i+1])
-        except IndexError:
-            media_chapters[chapter] = start_list[i], media_length
+    # Main info list
+    videos_info = []
 
-    return media_chapters
+    for video in tqdm(channel.videos):
+
+        time_stamp = str(timedelta(seconds=video.length))
+
+        # Append video info to main list
+        videos_info.append(
+            [
+                video.title,
+                video.watch_url,
+                time_stamp,
+                video.views,
+                video.publish_date,
+                video.description,
+                video.keywords,
+                video.author,
+                video.video_id,
+            ]
+        )
+
+    # Construct a Pandas DataFrame and append to file
+    df = pd.DataFrame(videos_info, columns=column_names)
+
+    if write_to_file:
+        df.to_csv(filename)
+
+    return df
 
 
 def download_media(
@@ -81,9 +105,6 @@ def download_media(
         yt = YouTube(url)
         file = yt.streams.filter(only_audio=True).first().download(pathname,
                                                                    max_retries=2, filename=filename)
-
-        new_file = file.split(".mp4")[0] + ".mp3"
-        subprocess.run(['mv', f'{file}', f'{new_file}'])
 
         return file
 
@@ -120,67 +141,13 @@ def download_media(
     return f"{datetime.now()} - Downloaded:\n{media_list}"
 
 
-def channel_videos_list(
-        channel_url: str,
-        filename: str = "",
-        write_to_file: bool = False,
-) -> pd.DataFrame:
-    """
-    Given a YouTube channel URL, collects the info of all of its videos and constructs a DataFrame.
-
-    :param channel_url: A URL of the YouTube channel
-    :param filename: Name of the file to save to
-    :param write_to_file: If True write to .csv file
-    :returns: Pandas DataFrame with columns:
-    Name, URL_Link, Length, Views, Publish_date, Description, Keywords, Author, ID
-    """
-
-    column_names = ('Name', 'URL_Link', 'Length', 'Views', "Publish_date", 'Description', 'Keywords', 'Author', 'ID')
-
-    # Construct a YouTube channel object
-    channel = Channel(channel_url)
-
-    if filename == "":
-        name = re.sub(" ", "", channel.channel_name)
-        filename = name + "_videos.csv"
-
-    # Main info list
-    videos_info = []
-
-    for video in channel.videos:
-
-        time_stamp = str(timedelta(seconds=video.length))
-
-        # Append video info to main list
-        videos_info.append(
-            [
-                video.title,
-                video.watch_url,
-                time_stamp,
-                video.views,
-                video.publish_date,
-                video.description,
-                video.keywords,
-                video.author,
-                video.video_id,
-            ]
-        )
-
-    # Construct a Pandas DataFrame and append to file
-    df = pd.DataFrame(videos_info, columns=column_names)
-
-    if write_to_file:
-        df.to_csv(filename)
-
-    return df
-
-
 def extract_matching_chapters(
         dataframe: pd.DataFrame,
         keywords: tuple = ("",),
 ) -> dict:
     """
-    Extracts a dict with YouTube video chapters from a Pandas DataFrame object that match any of the keywords.
+    Extracts a dict with YouTube video chapters from a Pandas DataFrame object that match any of
+    the keywords provided.
 
     :param dataframe: Pandas DataFrame of the 'channel_videos_list' return form
     :param keywords: List of string keywords to check against video chapters
@@ -258,15 +225,16 @@ def split_media_chapters(
 
     # cd into folder
     os.chdir(folder_path)
-    cwd = os.getcwd()
+
     # Get all video file names
-    files = [file for file in os.listdir(cwd)
-             if os.path.isfile(os.path.join(cwd, file)) and file[0] != '.']
+    files = list_files(folder_path)
 
     assert len(files) > 0, f"{folder_path} contains no files."
 
-    extensions = {file.split(".")[-1] for file in files}
-    ext = list(extensions)[0]
+    # Get most common file extension and use it as a base
+    extensions = [file.split(".")[-1] for file in files]
+    ext = most_common(extensions)
+
     args = [(media, ext) for media in chapter_dict.values()]
 
     with Pool(os.cpu_count()) as pool:
@@ -278,53 +246,3 @@ def split_media_chapters(
     os.chdir("..")
 
     return messages
-
-
-def list_chapters(
-        folder_path: str,
-        file_extension: str = "mp4",
-        file_name: str = "media.txt",
-):
-    """
-    Given a directory containing directories with chapters, outputs a file listing them.
-
-    :param folder_path: Name of folder containing the media files
-    :param file_extension: File extension, defaults to mp4
-    :param file_name: Name of file to save results to
-    :return: File listing all media to be concatenated
-    """
-    os.chdir(folder_path)
-    cwd = os.getcwd()
-    dirs = [directory for directory in os.listdir(cwd)
-            if os.path.isdir(os.path.join(cwd, directory))]
-
-    if len(dirs) == 0:
-        print(f"{folder_path} contains no directories.")
-        return 0
-
-    for directory in dirs:
-        os.system(f"""for f in '{directory}'/*.{file_extension};"""
-                  f"""do echo "file '$f'" >> {folder_path}/{file_name}; done""")
-
-
-def concat_media(
-        folder_path: str,
-        media_list: str,
-        filename: str,
-) -> None:
-    """
-    Using ffmpeg concatenates series of media files in a single one.
-
-    :param folder_path: Name of folder containing the media files
-    :param media_list: Name of Text file containing media to be concatenated
-    :param filename: Name of output file including extension
-    :return: Saves a concatenated media file in working directory
-    """
-    os.chdir(folder_path)
-
-    subprocess.run(['ffmpeg', '-f', 'concat', '-safe', '0', '-i', f"{media_list}",
-                    '-c', 'copy', f"{filename}"])
-
-    """ffmpeg -i input_1.mp4 -i input_2.mp4 -filter_complex "[0:v:0][0:a:0][1:v:0][1:a:0]concat=n=2:v=1:a=1[outv][outa]"
-     -map "[outv]" -map "[outa]" TEST.mkv"""
-

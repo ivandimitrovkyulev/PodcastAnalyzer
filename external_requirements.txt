@@ -1,1 +1,1 @@
-OS --> ffmpeg
+ffmpeg==5.0
