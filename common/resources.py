@@ -1,5 +1,5 @@
 import os
-import re
+from common.variables import regex_time
 
 
 def get_chapters(
@@ -13,9 +13,6 @@ def get_chapters(
     :param media_length: Media length in the %H:%M:%S format as last timestamp
     :returns: Dict with chapters containing name, start time & end time
     """
-
-    # Regex to match timestamp, eg. 4:35:21
-    regex_time = re.compile(r"(\d?[:]?\d+[:]\d+)")
 
     media_chapters = {}
 
@@ -142,3 +139,46 @@ def rename_file_extension(
         renamed_files.append(name)
 
     return renamed_files
+
+
+def reduce_text_len(
+        text: str,
+        max_len: int,
+) -> str:
+    """Takes a string as input and returns a reduced line length string, where
+    each line has a maximum specified character length. Achieved by inserting \n
+
+    :param text: String to be transformed
+    :param max_len: Maximum number of characters per line returned
+    """
+
+    if type(text) != str:
+        raise Exception("Parameters text & max_len must be str & int respectively.")
+
+    reduced_text = ""
+    text_len = len(text)
+    if text_len <= max_len:
+        return text
+    else:
+        count = 1
+        current_word = ""
+        for char in text:
+
+            if char.isspace():
+                reduced_text += current_word
+                current_word = ""
+
+                if count >= max_len:
+                    reduced_text += "\n"
+                    count = 0  # Reset counter
+                else:
+                    reduced_text += char
+                    count += 1  # Increment
+
+            else:
+                current_word += char
+                count += 1  # Increment
+
+        reduced_text += current_word
+
+        return reduced_text
