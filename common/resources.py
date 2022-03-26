@@ -1,45 +1,4 @@
 import os
-from common.variables import regex_time
-
-
-def get_chapters(
-        description: str,
-        media_length: str,
-) -> dict:
-    """
-    Attempt to extract YouTube media chapters from its description.
-
-    :param description: String to iterate through and look for chapters
-    :param media_length: Media length in the %H:%M:%S format as last timestamp
-    :returns: Dict with chapters containing name, start time & end time
-    """
-
-    media_chapters = {}
-
-    lines = description.split("\n")
-    start_list = []
-    chapter_name_list = []
-    for line in lines:
-        # Check if lines contains timestamp
-        result = regex_time.search(line)
-        # If timestamp found
-        if result is not None:
-            # Append start time
-            start_list.append(result[0])
-
-            for i, char in enumerate(line):
-                if char.isalpha():
-                    # Append chapter name
-                    chapter_name_list.append(line[i:].lower())
-                    break
-
-    for i, chapter in enumerate(chapter_name_list):
-        try:
-            media_chapters[chapter] = (start_list[i], start_list[i+1])
-        except IndexError:
-            media_chapters[chapter] = start_list[i], media_length
-
-    return media_chapters
 
 
 def delete_redundant_dirs(path: str) -> None:
@@ -54,6 +13,12 @@ def delete_redundant_dirs(path: str) -> None:
 
 
 def most_common(list_):
+    """
+    Returns the most common element in a list.
+
+    :param list_: Python List Data Structure
+    :return: Most common element of the list
+    """
     return max(set(list_), key=list_.count)
 
 
@@ -118,10 +83,10 @@ def rename_file_extension(
         new_extension: str,
 ) -> list:
     """
-    Iterates through all files in given dir and those that match extension get renamed.
+    Renames all files in a given dir that have an extension..
 
     :param folder_path: Name of folder containing the files
-    :param new_extension: Name of file extension to be given with dot, eg. '.wav'
+    :param new_extension: Name of file extension to be given, including dot, eg. '.wav'
     :return: List of renamed files
     """
     os.chdir(folder_path)
@@ -148,8 +113,9 @@ def reduce_text_len(
     """Takes a string as input and returns a reduced line length string, where
     each line has a maximum specified character length. Achieved by inserting \n
 
-    :param text: String to be transformed
-    :param max_len: Maximum number of characters per line returned
+    :param text: String to be reduced in length
+    :param max_len: Maximum number of characters per line
+    :returns: Reduced length string
     """
 
     if type(text) != str:

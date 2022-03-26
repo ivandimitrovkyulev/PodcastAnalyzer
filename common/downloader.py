@@ -1,6 +1,5 @@
 import os
 import re
-import subprocess
 import pandas as pd
 
 from functools import wraps
@@ -15,11 +14,8 @@ from pytube import (
     Channel,
     YouTube,
 )
-from common.resources import (
-    list_files,
-    most_common,
-    get_chapters,
-)
+from common.info import get_chapters
+
 from common.variables import (
     column_names,
     regex_non_word,
@@ -85,7 +81,7 @@ def download_media(
         media_type: int = 1,
 ) -> str:
     """
-    Download media from YouTube given media URL list.
+    Download media from YouTube given a URL list.
 
     :param chapter_dict: Dict of chapters of 'extract_matching_chapters' type
     :param pathname: Where to save. Default is current working dir.
@@ -99,7 +95,7 @@ def download_media(
                 value = func(*args, **kwargs)
 
                 return value
-            except:
+            except Exception:
                 print(f"Something went wrong while downloading: {args[0]}. File now saved.")
 
         return wrapper
@@ -165,7 +161,7 @@ def download_media(
     return f"{datetime.now()} - Downloaded:\n{media_list}"
 
 
-def extract_matching_chapters(
+def get_matching_chapters(
         dataframe: pd.DataFrame,
         keywords: list = None,
 ) -> dict:
@@ -208,66 +204,3 @@ def extract_matching_chapters(
             }
 
     return chapters_to_extract
-
-
-def split_media_chapters(
-        folder_path: str,
-        chapters_dict: dict,
-) -> list:
-    """
-    Given folder with media files, cuts out clips from each one based on dict of chapters
-    with name, start & end timestamps.
-
-    :param folder_path: Name of folder containing the media files
-    :param chapters_dict: Dict of chapters of 'extract_matching_chapters' type
-    :return: List of messages
-    """
-
-    def split_media(media, extension):
-        media_name = media['media_name']
-
-        filename = media_name + '.' + extension
-        chapters = media['chapters']
-
-        # Create new folder with video name
-        os.mkdir(media_name)
-
-        message = f"{media_name}\n"
-        for chapter in chapters.keys():
-            start = chapters[chapter][0]
-            end = chapters[chapter][1]
-            new_file = regex_non_word.sub("_", chapter) + "." + extension
-
-            subprocess.run(['ffmpeg', '-i', f'{filename}', '-ss', f'{start}', '-to', f'{end}',
-                           '-c:v', 'copy', '-c:a', 'copy', f'{media_name}/{new_file}'])
-
-            message += f"{chapter}, {start}, {end}\n"
-
-        os.system(f"""echo "{message}" > "{media_name}"/info.txt""")
-        os.system(f"""echo "{media['guest']}" > "{media_name}"/guest.txt""")
-
-        return message
-
-    # cd into folder
-    os.chdir(folder_path)
-
-    # Get all video file names
-    files = list_files(folder_path)
-
-    assert len(files) > 0, f"{folder_path} contains no files."
-
-    # Get most common file extension and use it as a base
-    extensions = [file.split(".")[-1] for file in files]
-    ext = most_common(extensions)
-
-    arguments = [(media, ext) for media in chapters_dict.values()]
-
-    with Pool(os.cpu_count()) as pool:
-        results = pool.starmap(split_media, arguments)
-
-        messages = [res for res in results]
-
-    # cd back into main directory
-    os.chdir("..")
-
-    return messages
