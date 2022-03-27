@@ -134,21 +134,24 @@ def concat_media_chapters(
 def concat_media_chapters_and_images(
         folder_path: str,
         out_filename: str = "concat_media.mp4",
-        file_extension: str = "mp4",
+        file_ext: str = "mp4",
 ) -> None:
     """
-    For each episode ffmpeg concat all chapters and their images into 1 file.
+    Given a dir with dirs containing media chapter files, concats each chapter audio with chapter image.
+    It then concats all the chapters together into a 'out_filename' file using 'media.txt' previously created.
+    Finally, it saves another 'media.txt' file in main dir with names for final concat later.
 
     :param folder_path: Name of folder containing dirs
     :param out_filename: Name of output file
-    :param file_extension: Name of existing media extension, without the dot
+    :param file_ext: Name of existing media extension, without the dot
     :return: None
     """
 
     os.chdir(folder_path)
 
     # List of directories inside current dir
-    dirs = list_dirs(folder_path)
+    dirs = [dir for dir in list_dirs(folder_path)
+            if dir != "images"]
 
     assert len(dirs) > 0, f"{folder_path} contains no directories."
 
@@ -158,17 +161,18 @@ def concat_media_chapters_and_images(
 
         # List all media files
         files = [file for file in list_files(cwd)
-                 if file.endswith(f".{file_extension}") is True]
+                 if file.endswith(f".{file_ext}") is True]
 
         for file in files:
-            file_name = re.split(f".{file_extension}", file)[0]
+            file_name = re.split(f".{file_ext}", file)[0]
 
             # Combine chapter audio and image into a video
-            os.system(f"ffmpeg -i {file_name}.png -i {file_name}.{file_extension} -c:v libx264 "
-                      f"-tune stillimage -c:a copy chapter_{file_name}.{file_extension}")
+            os.system(f"ffmpeg -i {file_name}.jpeg -i {file_name}.{file_ext} -c:v libx264 "
+                      f"-tune stillimage -c:a copy -pix_fmt yuv420p chapter_{file_name}.{file_ext}")
 
             # Append chapter file name for later concat
-            os.system(f"""echo "file 'chapter_{file_name}.{file_extension}'" >> media.txt""")
+            os.system(f"""echo "file 'chapter_{file_name}.{file_ext}'" >> media.txt""")
+
         # Concat all chapter videos into one
         concat_media_demuxer(cwd, "media.txt", out_filename)
 

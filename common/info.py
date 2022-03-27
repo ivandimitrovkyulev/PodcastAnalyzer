@@ -1,6 +1,5 @@
 import os
 import re
-import subprocess
 
 from tqdm import tqdm
 from datetime import datetime
@@ -66,11 +65,13 @@ def split_media_chapters(
         chapters_dict: dict,
 ) -> list:
     """
-    Given folder with media files, cuts out clips from each one based on dict of chapters
-    with name, start & end timestamps.
+    Given a dir with media files, clips out chapters from each media based on dict of chapters
+    with name, start & end timestamps. For each file creates a new dir and puts the chapter clips inside.
+    Also creates an info.txt file with Episode name & lists of chapter names and timestamps.
+    Also creates a guest.txt file with a description of the guest.
 
     :param folder_path: Name of folder containing the media files
-    :param chapters_dict: Dict of chapters of the 'extract_matching_chapters' type
+    :param chapters_dict: Dict of chapters of the 'get_matching_chapters' type
     :return: List of messages
     """
 
@@ -89,8 +90,8 @@ def split_media_chapters(
             end = chapters[chapter][1]
             new_file = regex_non_word.sub("_", chapter) + "." + extension
 
-            subprocess.run(['ffmpeg', '-i', f'{filename}', '-ss', f'{start}', '-to', f'{end}',
-                           '-c:v', 'copy', '-c:a', 'copy', f'{media_name}/{new_file}'])
+            os.system(f"ffmpeg -i {filename} -ss {start} -to {end} -c:v copy -c:a copy "
+                      f"{media_name}/{new_file}")
 
             message += f"{chapter}, {start}, {end}\n"
 
@@ -131,6 +132,8 @@ def list_image_info(
     """
     For each episode's chapter exports an image with description and whole text file containing
     media to be concatenated.
+    Given a dir with dirs containing chapter files, creates an image for each chapter inside each dir.
+    In main dir creates an 'images' dir with a media.txt file listing chapter images and their durations.
 
     :param folder_path: Name of folder containing the media files
     :param out_filename: Name of file to save results to
@@ -147,6 +150,8 @@ def list_image_info(
     os.mkdir("images")
 
     files_list = []
+    start_timestamp = datetime.strptime("00:00:00", "%H:%M:%S")
+    os.system(f"echo OUTLINE >> images/outline.txt")
     for directory in tqdm(dirs):
 
         guest = check_output(['cat', f"{directory}/guest.txt"]).decode('utf-8')
@@ -154,6 +159,14 @@ def list_image_info(
         with open(f"{directory}/info.txt", 'r') as file:
             text = file.read()
             lines = text.split("\n")
+
+            episode_name = lines[0].split("Lex")[0]
+            episode_name = re.sub("_", " ", episode_name)
+            try:
+                first, second = episode_name.split(" ")[:2]
+                episode_name = first + " " + second
+            except ValueError:
+                pass
 
             for chapter in lines[1:]:
                 if chapter != "":
@@ -163,7 +176,7 @@ def list_image_info(
 
                     message = f"Guest:\n\n{guest}\n\n\nChapter:\n\n{chapter_name}"
                     title = regex_non_word.sub("_", chapter_name)
-                    image_name = f"{directory}/{title}.png"
+                    image_name = f"{directory}/{title}.jpeg"
                     # Create image for the chapter
                     text_image(message, image_name, text_size=35)
 
@@ -182,6 +195,11 @@ def list_image_info(
                     os.system(f"""echo "file '{folder_path}/{image_name}'" >> images/{out_filename}""")
                     os.system(f"echo duration {duration} >> images/{out_filename}")
 
+                    # Write Outline to file
+                    os.system(f"echo {start_timestamp.time()} - {chapter_name}, {episode_name} >> images/outline.txt")
+                    # Update start of timestamp
+                    start_timestamp += duration
+
                     files_list.append(f"{folder_path}/{image_name}")
 
     # Add last filename again due to ffmpeg quirk
@@ -196,7 +214,7 @@ def list_chapters_and_info(
         out_filename: str = "media.txt",
 ) -> list:
     """
-    Given a directory containing directories with chapters, outputs a file listing them.
+    Given a dir containing directories with chapters, outputs a file listing them.
 
     :param folder_path: Name of folder containing the media files
     :param file_extension: Name of file extension
@@ -258,3 +276,47 @@ def list_chapters_and_info(
                     start_time += duration
 
     return files_list
+
+
+def query_keywords(
+        chapters_dict: dict,
+        key_words: list = None,
+) -> None:
+    """
+    Queries chapters with keywords provided and returns video info.
+
+    :param chapters_dict: Dict of chapters of 'get_matching_chapters' type
+    :param key_words: List of keywords to query
+    :return: None
+    """
+    total_length = datetime.strptime("00:00:00", "%H:%M:%S")
+    count_chapters = 0
+    chapters_string = ""
+    for chapter in chapters_dict:
+
+        for chapter_name in chapters_dict[chapter]['chapters']:
+            start, end = chapters_dict[chapter]['chapters'][chapter_name][:2]
+            try:
+                start_time = datetime.strptime(start, "%H:%M:%S")
+            except ValueError:
+                start_time = datetime.strptime(start, "%M:%S")
+            try:
+                end_time = datetime.strptime(end, "%H:%M:%S")
+            except ValueError:
+                end_time = datetime.strptime(end, "%M:%S")
+
+            duration = end_time - start_time
+            total_length += duration
+
+            chapters_string += chapter_name + "\n"
+            count_chapters += 1
+
+    total_duration = total_length.time()
+
+    print(
+        f"\nList of all chapters: \n{chapters_string}\n"
+        f"Searching for: {key_words} will output a Video with:\n"
+        f"Total duration: {total_duration}\n"
+        f"From {len(chapters_dict)} episodes\n"
+        f"Total of {count_chapters} chapters\n"
+    )
