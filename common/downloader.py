@@ -83,7 +83,7 @@ def download_media(
     """
     Download media from YouTube given a URL list.
 
-    :param chapter_dict: Dict of chapters of 'extract_matching_chapters' type
+    :param chapter_dict: Dict of chapters of 'get_matching_chapters' type
     :param pathname: Where to save. Default is current working dir.
     :param media_type: 0 for Video, 1 for Audio. Default 1-Audio
     :return: List of downloaded media
@@ -187,7 +187,7 @@ def get_matching_chapters(
         for chapter in video_chapters.keys():
             # If any of the chapters matches at least one keyword
             for keyword in keywords:
-                if keyword in chapter:
+                if keyword.lower() in chapter:
                     chapters[chapter] = video_chapters[chapter]
                     break
 
