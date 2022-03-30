@@ -185,11 +185,45 @@ def get_matching_chapters(
 
         chapters = {}
         for chapter in video_chapters.keys():
+            # Split chapter into words
+            chapter_words = regex_non_word.split(chapter)
             # If any of the chapters matches at least one keyword
             for keyword in keywords:
-                if keyword.lower() in chapter:
+                try:
+                    sign = keyword[0]
+                except IndexError:
+                    sign = ""
+
+                if sign == "-":
+                    word = keyword[1:].lower()
+                else:
+                    word = keyword.lower()
+
+                if word in chapter_words and sign == "-":
+                    break
+
+                if word in chapter_words and sign != "-":
+                    # Add chapter to dict
                     chapters[chapter] = video_chapters[chapter]
                     break
+
+            # If a negated keyword matches and already added, delete from chapters
+            for keyword in keywords:
+                try:
+                    sign = keyword[0]
+                except IndexError:
+                    sign = ""
+
+                if sign == "-":
+                    word = keyword[1:].lower()
+                else:
+                    word = keyword.lower()
+
+                if word in chapter_words and sign == "-":
+                    try:
+                        del chapters[chapter]
+                    except KeyError:
+                        pass
 
         # add to dict
         if len(chapters) > 0:

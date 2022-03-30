@@ -308,7 +308,7 @@ def query_keywords(
             duration = end_time - start_time
             total_length += duration
 
-            chapters_string += chapter_name + "\n"
+            chapters_string += f"{total_length.time()}" + " - " + chapter_name + "\n"
             count_chapters += 1
 
     total_duration = total_length.time()
